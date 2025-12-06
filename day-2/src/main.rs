@@ -88,7 +88,7 @@ fn subdivide_range<'a, 'b>(range: bound::Range) -> Vec<bound::Range> {
     }
 
     // Generating sub ranges
-    for i in range.min.digits..range.max.digits + 1 {
+    for i in range.min.digits..=range.max.digits {
         if i % 2 == 1 {
             continue;
         }
@@ -138,7 +138,7 @@ fn handle_even_range(range: bound::Range) -> Vec<usize> {
         return invalid_ids;
     }
 
-    for i in 0..(span - 1) {
+    for i in 1..span {
         let invalid_first_digits = (min_first_numbers + i).to_string();
         let invalid_id = invalid_first_digits.repeat(2);
         invalid_ids.push(invalid_id.parse::<usize>().expect("Valid number"));
