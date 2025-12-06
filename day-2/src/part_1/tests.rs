@@ -1,7 +1,6 @@
-use crate::{
-    bound::{self, Range},
-    find_invalid_ids, handle_even_range, subdivide_range,
-};
+use crate::bound::{self, Range};
+
+use super::{find_invalid_ids, handle_even_range, subdivide_range};
 
 #[test]
 fn test_even_range_11_22() {
