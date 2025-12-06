@@ -1,8 +1,11 @@
 use std::{
     env, fs,
     io::{BufRead, BufReader, Error},
-    rc::Rc,
 };
+
+use crate::bound::{Bound, Range};
+
+mod bound;
 
 #[cfg(test)]
 mod tests;
@@ -19,10 +22,11 @@ fn main() {
                 .expect("Is string");
 
             let range = range.split_once('-').expect("Range is dash separated");
+            let range = Range::new(range.0.into(), range.1.into());
 
-            let invalid_ids = extract_invalid_ids_from_range(range);
+            let invalid_ids: Vec<usize> = find_invalid_ids(range);
 
-            dbg!(&range, &invalid_ids);
+            dbg!(&invalid_ids);
 
             return invalid_ids.into_iter().sum();
         })
@@ -32,7 +36,7 @@ fn main() {
 }
 
 /// Determines if
-fn extract_invalid_ids_from_range(range: (&str, &str)) -> Vec<usize> {
+fn find_invalid_ids(range: bound::Range) -> Vec<usize> {
     // Invalid if the number is, in it's entirety, just 2 numbers repeated...
     //
     // Some cases...
@@ -61,74 +65,62 @@ fn extract_invalid_ids_from_range(range: (&str, &str)) -> Vec<usize> {
     // How to extract all even,even ranges from any range?
     //
     // if 100 - 200000, then we want the ranges, 1000 - 9999, 100000 - 200000
-    //
-    //
-    // dbg!(&range, &invalid_ids);
 
     let invalid_ids: Vec<usize> = subdivide_range(range)
         .into_iter()
-        .map(|range| handle_even_range((&range.0, &range.1)))
+        .map(handle_even_range)
         .flatten()
         .collect();
 
     return invalid_ids;
 }
 
-///
-fn subdivide_range<'a, 'b>(range: (&'a str, &'a str)) -> Vec<(Box<str>, Box<str>)> {
-    let min_digits = range.0.chars().count();
-    let max_digits = range.1.chars().count();
-
-    let mut ranges = Vec::new();
+/// Divides a range into sub ranges of even digited numbers
+fn subdivide_range<'a, 'b>(range: bound::Range) -> Vec<bound::Range> {
+    let mut ranges: Vec<bound::Range> = Vec::new();
 
     // Streamline cases where there are the same number of digits
-    if min_digits == max_digits {
-        if min_digits % 2 == 0 {
-            ranges.push((Box::from(range.0), Box::from(range.1)));
+    if range.has_equal_digits() {
+        if range.min.has_even_digits() {
+            ranges.push(range);
         }
         return ranges;
     }
 
-    for i in min_digits..max_digits {
+    // Generating sub ranges
+    for i in range.min.digits..range.max.digits + 1 {
         if i % 2 == 1 {
             continue;
         }
 
-        let range_max: Box<str> = Box::from("9".repeat(i));
-
-        if min_digits == i {
-            ranges.push((Box::from(range.0), Box::from("9".repeat(min_digits))));
+        let range_max: usize = 10usize.pow(i as u32) - 1;
+        if range.min.digits == i {
+            ranges.push(Range::new(range.min.clone(), range_max.into()));
             continue;
         }
 
-        let range_min: Box<str> = Box::from("1".to_string() + &"0".repeat(i - 1));
-
-        if max_digits == i {
-            ranges.push((range_min, Box::from(range.1)));
-
-            dbg!(&range, &invalid_ids);
+        let range_min: usize = 10usize.pow((i - 1) as u32);
+        if range.max.digits == i {
+            ranges.push(Range::new(range_min.into(), range.max.clone()));
             continue;
         }
 
-        ranges.push((range_min, range_max));
+        ranges.push(Range::new(range_min.into(), range_max.into()));
     }
 
     return ranges;
 }
 
 /// Returns the invalid ids in a range of _even_ digit numbers
-fn handle_even_range(range: (&str, &str)) -> Vec<usize> {
-    let min_first_digits = &range.0[0..(range.0.chars().count() / 2)];
-    let max_first_digits = &range.1[0..(range.1.chars().count() / 2)];
+fn handle_even_range(range: bound::Range) -> Vec<usize> {
+    let min_first_digits = &range.min.str[0..(range.max.digits / 2)];
+    let max_first_digits = &range.max.str[0..(range.max.digits / 2)];
 
     // Unwrap since these are definitely numbers
     let min_first_numbers = min_first_digits.parse::<usize>().expect("Valid number");
     let max_first_numbers = max_first_digits.parse::<usize>().expect("Valid number");
 
-    let actual_min = range.0.parse::<usize>().expect("Valid number");
-    let actual_max = range.1.parse::<usize>().expect("Valid number");
-
-    let range: usize = max_first_numbers - min_first_numbers;
+    let span: usize = max_first_numbers - min_first_numbers;
 
     let mut invalid_ids = Vec::new();
 
@@ -136,15 +128,17 @@ fn handle_even_range(range: (&str, &str)) -> Vec<usize> {
         .parse::<usize>()
         .expect("Valid number");
 
-    if actual_min <= potential_min {
+    dbg!(&potential_min, &range.min.value);
+
+    if range.min.value <= potential_min && potential_min <= range.max.value {
         invalid_ids.push(potential_min)
     }
 
-    if range == 0 {
+    if span == 0 {
         return invalid_ids;
     }
 
-    for i in 0..(range - 1) {
+    for i in 0..(span - 1) {
         let invalid_first_digits = (min_first_numbers + i).to_string();
         let invalid_id = invalid_first_digits.repeat(2);
         invalid_ids.push(invalid_id.parse::<usize>().expect("Valid number"));
@@ -154,7 +148,7 @@ fn handle_even_range(range: (&str, &str)) -> Vec<usize> {
         .parse::<usize>()
         .expect("Valid number");
 
-    if potential_max <= actual_max {
+    if potential_max <= range.max.value {
         invalid_ids.push(potential_max);
     }
 
